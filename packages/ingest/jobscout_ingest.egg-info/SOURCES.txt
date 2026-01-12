@@ -1,0 +1,7 @@
+pyproject.toml
+jobscout_ingest/__init__.py
+jobscout_ingest/index.py
+jobscout_ingest.egg-info/PKG-INFO
+jobscout_ingest.egg-info/SOURCES.txt
+jobscout_ingest.egg-info/dependency_links.txt
+jobscout_ingest.egg-info/top_level.txt

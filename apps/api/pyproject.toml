@@ -1,0 +1,16 @@
+[project]
+name = "jobscout-api"
+version = "0.1.0"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "pydantic>=2.0",
+    "jobscout-core",
+    "jobscout-db",
+    "jobscout-pipeline",
+    "jobscout-agent"
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"]

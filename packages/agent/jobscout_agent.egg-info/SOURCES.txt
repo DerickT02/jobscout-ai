@@ -1,0 +1,6 @@
+pyproject.toml
+jobscout_agent/__init__.py
+jobscout_agent.egg-info/PKG-INFO
+jobscout_agent.egg-info/SOURCES.txt
+jobscout_agent.egg-info/dependency_links.txt
+jobscout_agent.egg-info/top_level.txt
