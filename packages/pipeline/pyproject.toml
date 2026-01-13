@@ -1,7 +1,9 @@
 [project]
 name = "jobscout-pipeline"
 version = "0.1.0"
-dependencies = []
+dependencies = [
+    "jobscout-ingest"
+]
 
 [build-system]
 requires = ["setuptools"]

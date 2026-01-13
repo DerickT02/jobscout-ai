@@ -4,4 +4,5 @@ jobscout_pipeline/index.py
 jobscout_pipeline.egg-info/PKG-INFO
 jobscout_pipeline.egg-info/SOURCES.txt
 jobscout_pipeline.egg-info/dependency_links.txt
+jobscout_pipeline.egg-info/requires.txt
 jobscout_pipeline.egg-info/top_level.txt

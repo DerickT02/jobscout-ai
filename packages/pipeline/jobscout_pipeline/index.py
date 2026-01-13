@@ -1,0 +1,1 @@
+from jobscout_,singest.register import getConnectors

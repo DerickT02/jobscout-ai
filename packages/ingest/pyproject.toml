@@ -1,7 +1,12 @@
 [project]
 name = "jobscout-ingest"
 version = "0.1.0"
-dependencies = []
+dependencies = [
+    "playwright>=1.41",
+    "beautifulsoup4>=4.12",
+    "requests>=2.31",
+    "jobscout-core",
+    "jobscout-db"]
 
 [build-system]
 requires = ["setuptools"]

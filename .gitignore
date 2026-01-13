@@ -1,0 +1,122 @@
+# =========================
+# OS / Editor
+# =========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# =========================
+# Virtual Environments
+# =========================
+.venv/
+venv/
+env/
+
+# =========================
+# Environment / Secrets
+# =========================
+.env
+.env.*
+*.pem
+*.key
+secrets/
+credentials.json
+
+# =========================
+# Logs & Runtime Artifacts
+# =========================
+logs/
+*.log
+tmp/
+temp/
+
+# =========================
+# Databases / Local State
+# =========================
+*.db
+*.sqlite
+*.sqlite3
+postgres-data/
+redis-data/
+
+# =========================
+# Scraped / Pipeline Data
+# =========================
+data/
+raw_data/
+exports/
+backups/
+
+# =========================
+# ML / LLM Artifacts
+# =========================
+embeddings/
+vector_store/
+token_usage.json
+prompt_traces/
+
+# =========================
+# Build / Distribution
+# =========================
+build/
+dist/
+
+# =========================
+# Docker
+# =========================
+docker-compose.override.yml
+*.pid
+
+# =========================
+# Frontend (if added later)
+# =========================
+node_modules/
+.next/
+out/
+dist/
+
+# =========================
+# Tests / Reports
+# =========================
+test_results/
+reports/
+coverage.xml
+
+# =========================
+# Jupyter / Experiments
+# =========================
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# =========================
+# Playwright
+# =========================
+.playwright/
+playwright-report/
+test-results/
+
+# =========================
+# Misc
+# =========================
+*.bak
+*.tmp
