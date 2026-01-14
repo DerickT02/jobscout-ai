@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from urllib.parse import urlencode, urljoin
 
 from jobscout_ingest.connectors.PlaywrightBase import PlaywrightConnector
@@ -9,90 +9,75 @@ from jobscout_ingest.connectors.PlaywrightBase import PlaywrightConnector
 
 @dataclass(frozen=True)
 class GoogleCareersQuery:
-    """
-    Controls what the Google Careers results page shows.
-
-    Examples:
-      - keyword="software engineer intern"
-      - locations=["United States", "California"]
-      - remote_only=True (best-effort; depends on UI filters)
-      - max_results=100
-    """
-    keyword: str = "software engineer intern"
-    locations: Optional[List[str]] = None
+    keyword: str = "software engineer"
     max_results: int = 100
+    max_pages: int = 50  # safety to avoid infinite loops
 
 
 class GoogleCareersConnector(PlaywrightConnector):
-    """
-    Scrapes job search results from Google Careers (careers.google.com).
-
-    Output is RAW postings (not normalized):
-      {
-        "source": "google-careers",
-        "source_url": "...",         # job detail page link
-        "title": "...",
-        "location": "...",
-        "team": "...",               # best-effort
-        "employment_type": "...",    # best-effort if present
-        "posted_hint": "...",        # if present
-        "raw_text": "...",           # listing card text
-      }
-
-    This connector intentionally avoids deep parsing of the detail page in MVP.
-    You can add a second step later to open each job and extract full description.
-    """
-
     name = "google-careers"
-
-    BASE_URL = "https://careers.google.com/jobs/results/"
+    BASE_URL = "https://www.google.com/about/careers/applications/jobs/results"
 
     def __init__(self, query: GoogleCareersQuery) -> None:
         self.query = query
 
-    def scrape(self, page) -> List[Dict[str, Any]]:
-        url = self._build_results_url(self.query)
-        page.goto(url, timeout=60000)
-        page.wait_for_load_state("networkidle")
+    def _build_results_url(self) -> str:
+        return f"{self.BASE_URL}?{urlencode({'q': self.query.keyword})}"
 
-        # Best-effort: accept cookies if a banner appears.
-        self._dismiss_cookie_banner(page)
+    def scrape(self, page) -> List[Dict[str, Any]]:
+        page.goto(self._build_results_url(), timeout=60000)
+
+        # For SPAs, networkidle can happen before the list is actually populated.
+        # Instead, wait for at least one job link to appear.
+        job_link = "a[href*='/about/careers/applications/jobs/results/']"
+        page.wait_for_selector(job_link, timeout=60000)
 
         results: List[Dict[str, Any]] = []
         seen_urls: set[str] = set()
 
-        # Google Careers often uses infinite scroll / "load more".
-        # We'll scroll until we collect max_results or no new cards appear.
-        stagnant_rounds = 0
-        last_count = 0
+        def job_anchors():
+            # These are the clickable job items; much more stable than "all h3".
+            return page.locator(job_link)
 
-        while len(results) < self.query.max_results and stagnant_rounds < 6:
-            cards = page.query_selector_all("a[href*='/jobs/results/']")
+        def first_job_url() -> str:
+            loc = job_anchors().first
+            href = loc.get_attribute("href") if loc.count() else None
+            if not href:
+                return ""
+            return href if href.startswith("http") else urljoin("https://www.google.com", href)
 
-            for a in cards:
-                href = a.get_attribute("href")
-                if not href:
+        pages_visited = 0
+
+        while len(results) < self.query.max_results and pages_visited < self.query.max_pages:
+            pages_visited += 1
+
+            anchors = job_anchors()
+            count = anchors.count()
+            if count == 0:
+                print("[google-careers] STOP: no job anchors found on page", pages_visited)
+                break
+
+            # Parse current page results
+            for i in range(count):
+                a = anchors.nth(i)
+                href = a.get_attribute("href") or ""
+                url = href if href.startswith("http") else urljoin("https://www.google.com", href)
+                if not url or url in seen_urls:
                     continue
 
-                full_url = href if href.startswith("http") else urljoin("https://careers.google.com", href)
-                if full_url in seen_urls:
-                    continue
+                raw_text = (a.inner_text() or "").strip()
+                # Title is usually within the clickable element; fallback to first line
+                lines = [ln.strip() for ln in raw_text.split("\n") if ln.strip()]
+                title = lines[0] if lines else ""
+                location = lines[1] if len(lines) > 1 else ""
 
-                # Try to pull a structured view from the card.
-                # Card text usually contains title + location + team lines.
-                raw_text = a.inner_text().strip()
-                title = self._guess_title(raw_text)
-                location = self._guess_location(raw_text)
-                team = self._guess_team(raw_text)
-
-                seen_urls.add(full_url)
+                seen_urls.add(url)
                 results.append(
                     {
                         "source": "google-careers",
-                        "source_url": full_url,
+                        "source_url": url,
                         "title": title,
                         "location": location,
-                        "team": team,
                         "raw_text": raw_text,
                     }
                 )
@@ -100,58 +85,42 @@ class GoogleCareersConnector(PlaywrightConnector):
                 if len(results) >= self.query.max_results:
                     break
 
-            # progress detection
-            if len(results) == last_count:
-                stagnant_rounds += 1
-            else:
-                stagnant_rounds = 0
-                last_count = len(results)
+            # Attempt to go to next page
+            prev_first = first_job_url()
 
-            # Scroll to trigger lazy loading
-            page.mouse.wheel(0, 2000)
-            page.wait_for_timeout(800)
+            # The "Next" control is often an icon button with text node navigate_next
+            next_button = page.locator(
+                "xpath=//button[.//span[normalize-space(text())='navigate_next'] or .//*[normalize-space(text())='navigate_next']]"
+            )
 
-        return results[: self.query.max_results]
-
-    def _build_results_url(self, q: GoogleCareersQuery) -> str:
-        # Google Careers has a UI-driven filter system; query params aren’t always stable.
-        # The most stable approach for MVP is to use the keyword search box via URL "q".
-        params = {"q": q.keyword}
-
-        # Locations: best-effort. If Google changes URL param behavior, you can remove this
-        # and instead apply filters via UI clicks (more work, more stable once coded).
-        if q.locations:
-            # This may or may not be respected; still useful as a hint.
-            params["location"] = ", ".join(q.locations)
-
-        return f"{self.BASE_URL}?{urlencode(params)}"
-
-    def _dismiss_cookie_banner(self, page) -> None:
-        # Best-effort. If not present, does nothing.
-        # We avoid “anti-bot” tricks; just a normal click if visible.
-        for label in ["Accept all", "I agree", "Accept"]:
-            btn = page.get_by_role("button", name=label)
-            if btn and btn.is_visible():
-                btn.click()
-                page.wait_for_timeout(300)
+            if next_button.count() == 0:
+                print("[google-careers] STOP: next button not found (page", pages_visited, ")")
                 break
 
-    def _guess_title(self, raw_text: str) -> str:
-        # Usually first line is the title.
-        lines = [ln.strip() for ln in raw_text.split("\n") if ln.strip()]
-        return lines[0] if lines else ""
+            if not next_button.first.is_enabled():
+                print("[google-careers] STOP: next button disabled (page", pages_visited, ")")
+                break
 
-    def _guess_location(self, raw_text: str) -> str:
-        # Location often appears in the card text; heuristic.
-        lines = [ln.strip() for ln in raw_text.split("\n") if ln.strip()]
-        # Common pattern: Title / Location / Team
-        if len(lines) >= 2:
-            return lines[1]
-        return ""
+            next_button.first.click()
 
-    def _guess_team(self, raw_text: str) -> str:
-        lines = [ln.strip() for ln in raw_text.split("\n") if ln.strip()]
-        # Common pattern: Title / Location / Team
-        if len(lines) >= 3:
-            return lines[2]
-        return ""
+            # Wait for the results list to actually change
+            try:
+                page.wait_for_function(
+                    """(prev) => {
+                        const a = document.querySelector("a[href*='/about/careers/applications/jobs/results/']");
+                        if (!a) return false;
+                        return a.href !== prev;
+                    }""",
+                    arg=prev_first,
+                    timeout=60000,
+                )
+            except Exception:
+                # If it didn't change, we're likely at the last page or blocked by UI state
+                now_first = first_job_url()
+                print("[google-careers] STOP: results did not change after clicking next",
+                      "| prev_first =", prev_first,
+                      "| now_first =", now_first)
+                break
+
+        print(f"[google-careers] DONE: collected {len(results)} jobs across {pages_visited} pages")
+        return results[: self.query.max_results]
